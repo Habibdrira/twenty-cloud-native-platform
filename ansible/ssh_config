@@ -1,0 +1,24 @@
+# ⚠️  IMPORTANT : Ce fichier contient des IPs d'exemple (192.168.1.x).
+# Vous DEVEZ mettre à jour les HostName ci-dessous avec les vraies IPs de vos VMs.
+# Mettez également à jour les IPs correspondantes dans inventory.ini.
+
+Host master1
+    HostName 192.168.1.10
+    User ubuntu
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+
+Host worker1
+    HostName 192.168.1.20
+    User ubuntu
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+
+Host worker2
+    HostName 192.168.1.30
+    User ubuntu
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    StrictHostKeyChecking no

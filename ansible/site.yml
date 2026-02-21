@@ -1,0 +1,16 @@
+- name: Apply common configuration to all nodes
+  hosts: all
+  roles:
+    - common
+    - docker
+    - kubernetes
+
+- name: Initialize Kubernetes master node
+  hosts: masters
+  roles:
+    - master
+
+- name: Join worker nodes to the cluster
+  hosts: workers
+  roles:
+    - worker

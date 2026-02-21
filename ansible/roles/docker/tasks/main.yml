@@ -1,0 +1,193 @@
+#################################################
+# Install Docker
+#################################################
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+    state: present
+    update_cache: true
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create Docker config directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+
+- name: Configure Docker daemon
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "exec-opts": ["native.cgroupdriver=systemd"],
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "100m"
+        },
+        "storage-driver": "overlay2"
+      }
+    mode: '0644'
+  notify: Restart Docker
+
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+#################################################
+# Install CNI plugins (required)
+#################################################
+
+- name: Create CNI directory
+  ansible.builtin.file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+
+- name: Download CNI plugins
+  ansible.builtin.get_url:
+    url: "https://github.com/containernetworking/plugins/releases/download/v{{ cni_plugins_version }}/cni-plugins-linux-amd64-v{{ cni_plugins_version }}.tgz"
+    dest: /tmp/cni.tgz
+    mode: '0644'
+    force: false
+
+- name: Extract CNI plugins
+  ansible.builtin.unarchive:
+    src: /tmp/cni.tgz
+    dest: /opt/cni/bin
+    remote_src: true
+    creates: /opt/cni/bin/bridge
+
+#################################################
+# Install cri-dockerd
+#################################################
+
+- name: Check if cri-dockerd is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/cri-dockerd
+  register: docker_cri_dockerd_binary
+
+- name: Download cri-dockerd
+  ansible.builtin.get_url:
+    url: "https://github.com/Mirantis/cri-dockerd/releases/download/v{{ cri_dockerd_version }}/cri-dockerd-{{ cri_dockerd_version }}.amd64.tgz"
+    dest: /tmp/cri-dockerd.tgz
+    mode: '0644'
+  when: not docker_cri_dockerd_binary.stat.exists
+
+- name: Extract cri-dockerd
+  ansible.builtin.unarchive:
+    src: /tmp/cri-dockerd.tgz
+    dest: /tmp
+    remote_src: true
+  when: not docker_cri_dockerd_binary.stat.exists
+
+- name: Install cri-dockerd binary
+  ansible.builtin.copy:
+    src: /tmp/cri-dockerd/cri-dockerd
+    dest: /usr/local/bin/cri-dockerd
+    mode: '0755'
+    remote_src: true
+  when: not docker_cri_dockerd_binary.stat.exists
+
+#################################################
+# Create cri-docker.socket
+#################################################
+
+- name: Create cri-docker.socket
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cri-docker.socket
+    content: |
+      [Unit]
+      Description=CRI Docker Socket
+
+      [Socket]
+      ListenStream=/var/run/cri-dockerd.sock
+      SocketMode=0660
+      SocketUser=root
+      SocketGroup=docker
+
+      [Install]
+      WantedBy=sockets.target
+    mode: '0644'
+
+#################################################
+# Create cri-docker.service
+#################################################
+
+- name: Create cri-docker.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cri-docker.service
+    content: |
+      [Unit]
+      Description=CRI Docker Service
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      ExecStart=/usr/local/bin/cri-dockerd --docker-endpoint unix:///var/run/docker.sock --network-plugin=cni
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+
+#################################################
+# Enable services
+#################################################
+
+- name: Flush handlers to ensure Docker is restarted before starting cri-docker
+  ansible.builtin.meta: flush_handlers
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  changed_when: false
+
+- name: Enable cri-docker.socket
+  ansible.builtin.systemd:
+    name: cri-docker.socket
+    enabled: true
+    state: started
+
+- name: Enable and start cri-docker.service
+  ansible.builtin.systemd:
+    name: cri-docker.service
+    enabled: true
+    state: started
+
+#################################################
+# Install Docker Compose v2
+#################################################
+
+- name: Create Docker CLI plugins directory
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    mode: '0755'
+
+- name: Check if Docker Compose is already installed
+  ansible.builtin.stat:
+    path: /usr/local/lib/docker/cli-plugins/docker-compose
+  register: docker_compose_binary
+
+- name: Download Docker Compose
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: '0755'
+    force: false
+  when: not docker_compose_binary.stat.exists
+
+- name: Verify Docker Compose installation
+  ansible.builtin.command: docker compose version
+  changed_when: false
+  register: docker_compose_check
+  failed_when: false

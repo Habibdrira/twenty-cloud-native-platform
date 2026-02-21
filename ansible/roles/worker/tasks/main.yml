@@ -1,0 +1,9 @@
+- name: Check worker joined
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: worker_joined
+
+- name: Join cluster
+  ansible.builtin.command: "{{ hostvars[groups['masters'][0]].master_kube_join_cmd }}"
+  changed_when: not worker_joined.stat.exists
+  when: not worker_joined.stat.exists
