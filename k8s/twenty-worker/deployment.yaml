@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twenty-worker
+  namespace: twentycrm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: twenty-worker
+  template:
+    metadata:
+      labels:
+        app: twenty-worker
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-server
+          image: busybox
+          command: ['sh', '-c', 'until nc -z twenty-server 3000; do echo waiting for server; sleep 5; done']
+      containers:
+        - name: twenty-worker
+          image: twentycrm/twenty:latest
+          command: ["yarn", "worker:prod"]
+          env:
+            - name: PG_DATABASE_URL
+              value: "postgres://postgres:postgres@postgres:5432/default"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: twenty-secrets
+                  key: APP_SECRET
+            - name: SERVER_URL
+              value: "http://192.168.1.10:30020"
+            - name: STORAGE_TYPE
+              value: "local"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2048Mi
+          volumeMounts:
+            - name: twenty-storage
+              mountPath: /app/packages/twenty-server/.local-storage
+      volumes:
+        - name: twenty-storage
+          persistentVolumeClaim:
+            claimName: twenty-server-pvc

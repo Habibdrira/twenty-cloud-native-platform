@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twenty-server
+  namespace: twentycrm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: twenty-server
+  template:
+    metadata:
+      labels:
+        app: twenty-server
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
+        - name: wait-for-redis
+          image: busybox
+          command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done']
+      containers:
+        - name: twenty-server
+          image: twentycrm/twenty:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_PORT
+              value: "3000"
+            - name: SERVER_URL
+              value: "http://192.168.1.10:30020"
+            - name: PG_DATABASE_URL
+              value: "postgres://postgres:postgres@postgres:5432/default"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: twenty-secrets
+                  key: APP_SECRET
+            - name: SIGN_IN_PREFILLED
+              value: "true"
+            - name: STORAGE_TYPE
+              value: "local"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+          volumeMounts:
+            - name: twenty-storage
+              mountPath: /app/packages/twenty-server/.local-storage
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: twenty-storage
+          persistentVolumeClaim:
+            claimName: twenty-server-pvc
