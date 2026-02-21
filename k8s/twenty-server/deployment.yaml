@@ -60,15 +60,16 @@ spec:
             httpGet:
               path: /healthz
               port: 3000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 10
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 20
           livenessProbe:
             httpGet:
               path: /healthz
               port: 3000
-            initialDelaySeconds: 60
-            periodSeconds: 20
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            failureThreshold: 10
       volumes:
         - name: twenty-storage
           persistentVolumeClaim:

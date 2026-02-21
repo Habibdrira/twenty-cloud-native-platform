@@ -16,18 +16,16 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: twentycrm/twenty-postgres-spilo:3.3-p2
+          image: postgres:16-alpine
           ports:
             - containerPort: 5432
           env:
-            - name: PGUSER_SUPERUSER
+            - name: POSTGRES_USER
               value: "postgres"
-            - name: PGPASSWORD_SUPERUSER
+            - name: POSTGRES_PASSWORD
               value: "postgres"
-            - name: SPILO_PROVIDER
-              value: "local"
-            - name: ALLOW_NOSSL
-              value: "true"
+            - name: POSTGRES_DB
+              value: "default"
           resources:
             requests:
               cpu: 250m
