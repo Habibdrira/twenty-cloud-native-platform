@@ -1,68 +1,53 @@
+- import_tasks: ../../common/tasks/ensure-apt-not-locked.yml
+
 - name: Create keyrings directory
-  ansible.builtin.file:
+  file:
     path: /etc/apt/keyrings
     state: directory
-    mode: '0755'
+    mode: "0755"
+    owner: root
+    group: root
+  become: yes
 
 - name: Check for Kubernetes GPG key
-  ansible.builtin.stat:
-    path: /etc/apt/keyrings/kubernetes.gpg
-  register: kubernetes_gpg_key
+  stat:
+    path: /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+  register: gpgkey
 
-- name: Download Kubernetes GPG key
-  ansible.builtin.get_url:
-    url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version.split('.')[:2] | join('.') }}/deb/Release.key"
-    dest: /tmp/kubernetes.key
-    mode: '0644'
-  when: not kubernetes_gpg_key.stat.exists
+- name: Download Kubernetes GPG key (compatible pkgs.k8s.io, officiel)
+  get_url:
+    url: https://pkgs.k8s.io/core/stable/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+    mode: "0644"
+  when: not gpgkey.stat.exists
+  become: yes
 
 - name: Convert Kubernetes GPG key
-  ansible.builtin.command: gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg /tmp/kubernetes.key
+  command: >
+    gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg /etc/apt/keyrings/kubernetes-archive-keyring.gpg
   args:
-    creates: /etc/apt/keyrings/kubernetes.gpg
-  when: not kubernetes_gpg_key.stat.exists
+    creates: /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+  become: yes
 
-- name: Add Kubernetes repository
-  ansible.builtin.copy:
-    dest: /etc/apt/sources.list.d/kubernetes.list
-    content: |
-      deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version.split('.')[:2] | join('.') }}/deb/ /
-    mode: '0644'
+- name: Add Kubernetes repository (repo stable officiel)
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core/stable/deb/ /"
+    state: present
+    filename: kubernetes
+  become: yes
 
-- name: Install Kubernetes packages
-  ansible.builtin.apt:
+- name: Install Kubernetes packages robustly
+  apt:
     name:
-      - kubelet
-      - kubeadm
-      - kubectl
+      - kubelet={{ kubernetes_version }}
+      - kubeadm={{ kubernetes_version }}
+      - kubectl={{ kubernetes_version }}
+    update_cache: yes
     state: present
-    update_cache: true
-
-- name: Hold Kubernetes packages
-  ansible.builtin.dpkg_selections:
-    name: "{{ item }}"
-    selection: hold
-  loop:
-    - kubelet
-    - kubeadm
-    - kubectl
-
-- name: Configure kubelet runtime
-  ansible.builtin.copy:
-    dest: /etc/default/kubelet
-    content: |
-      KUBELET_EXTRA_ARGS=--container-runtime-endpoint=unix:///var/run/cri-dockerd.sock
-    mode: '0644'
-  notify: Restart kubelet
-
-- name: Wait for cri-dockerd socket to be available
-  ansible.builtin.wait_for:
-    path: /var/run/cri-dockerd.sock
-    state: present
-    timeout: 30
-
-- name: Enable kubelet
-  ansible.builtin.systemd:
-    name: kubelet
-    enabled: true
-    state: started
+    lock_timeout: 300
+  become: yes
+  register: kubepkgs
+  until: kubepkgs is succeeded
+  retries: 6
+  delay: 10
+# EOF

@@ -1,0 +1,9 @@
+- name: Wait for APT to be available (no lock held)
+  shell: |
+    while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ||           fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ||           fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+      sleep 5
+    done
+  args:
+    executable: /bin/bash
+  become: yes
+# EOF

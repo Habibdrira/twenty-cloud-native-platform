@@ -291,3 +291,28 @@ docker compose version
 | `docker_compose_version` | `"2.27.0"` | Docker Compose v2 version |
 | `cluster_user` | `"{{ ansible_user }}"` | Cluster user |
 | `ansible_become` | `true` | Automatic privilege escalation |
+
+
+## 🔒 Robustesse du déploiement Ansible
+
+- Le playbook attend automatiquement que le gestionnaire de paquets APT/Dpkg soit disponible avant chaque installation (`roles/common/tasks/ensure-apt-not-locked.yml`) : adieu les erreurs de lock.
+- Le service \`unattended-upgrades\` (mises à jour automatiques Ubuntu) est désactivé temporairement au début du déploiement, pour ne jamais gêner les installations de paquets.
+- Toutes les tâches d’installation apt importantes incluent une tolérance au lock (attente et retry automatique).
+- **Ne jamais lancer apt/apt-get manuellement sur les nœuds durant un déploiement.**
+- Fonctionne sur Ubuntu 20.04 et 22.04.
+
+## ⚠️ Pré-requis MANUELS : Mettre à jour vos systèmes
+
+Avant de lancer ce playbook, **VEUILLEZ TOUJOURS vous assurer que tous vos nœuds cible sont complètement à jour**.
+
+Sur chaque nœud cible, exécutez :
+\`\`\`bash
+sudo apt-get update
+sudo apt-get upgrade -y
+sudo apt-get dist-upgrade -y
+sudo reboot
+\`\`\`
+
+*Lancez le playbook SEULEMENT APRÈS vous être assuré qu'il n'y a aucune mise à jour restante sur vos VM et que tous les reboots nécessaires ont été faits.*
+
+Cela évite les blocages, conflits APT/dpkg, ou échecs inattendus lors de l'installation du cluster Kubernetes via Ansible.
